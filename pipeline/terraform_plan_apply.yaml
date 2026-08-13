@@ -1,0 +1,148 @@
+trigger: none
+pr: none
+
+pool:
+  vmImage: "ubuntu-latest"
+
+parameters:
+  - name: environment
+    displayName: "Select Environment"
+    type: string
+    default: hub
+    values:
+      - hub
+      - prod
+
+  - name: terraformAction
+    displayName: "Terraform Action"
+    type: string
+    default: "Plan Only"
+    values:
+      - "Plan Only"
+      - "Plan and Apply"
+
+variables:
+  - group: terraform-ixceed
+
+stages:
+- stage: Terraform
+  displayName: "Terraform Deployment"
+
+  jobs:
+  - job: Terraform
+    displayName: "${{ parameters.environment }} - ${{ parameters.terraformAction }}"
+
+    steps:
+
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      displayName: "Install Terraform"
+      inputs:
+        terraformVersion: $(terraformVersion)
+
+    - task: AzureCLI@2
+      displayName: "Terraform Init"
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        addSpnToEnvironment: true
+        scriptType: bash
+        scriptLocation: inlineScript
+        workingDirectory: "$(Build.SourcesDirectory)/envs/${{ parameters.environment }}"
+        inlineScript: |
+
+          # Authenticate Terraform using the service connection identity (OIDC preferred, client secret fallback).
+          export ARM_CLIENT_ID="$servicePrincipalId"
+          export ARM_TENANT_ID="$tenantId"
+          export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+          export ARM_USE_AZUREAD=true
+
+          if [ -n "$idToken" ]; then
+            export ARM_USE_OIDC=true
+            export ARM_OIDC_TOKEN="$idToken"
+          else
+            export ARM_CLIENT_SECRET="$servicePrincipalKey"
+          fi
+
+          echo "======================================="
+          echo "Environment : ${{ parameters.environment }}"
+          echo "Action      : ${{ parameters.terraformAction }}"
+          echo "======================================="
+
+          terraform version
+
+          terraform init \
+            -backend-config="resource_group_name=$(tfstateStorageRG)" \
+            -backend-config="storage_account_name=$(tfstateStorageAccount)" \
+            -backend-config="container_name=$(tfstateContainer)" \
+            -backend-config="key=${{ parameters.environment }}.tfstate"
+
+    - task: AzureCLI@2
+      displayName: "Terraform Validate"
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        addSpnToEnvironment: true
+        scriptType: bash
+        scriptLocation: inlineScript
+        workingDirectory: "$(Build.SourcesDirectory)/envs/${{ parameters.environment }}"
+        inlineScript: |
+          export ARM_CLIENT_ID="$servicePrincipalId"
+          export ARM_TENANT_ID="$tenantId"
+          export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+          export ARM_USE_AZUREAD=true
+
+          if [ -n "$idToken" ]; then
+            export ARM_USE_OIDC=true
+            export ARM_OIDC_TOKEN="$idToken"
+          else
+            export ARM_CLIENT_SECRET="$servicePrincipalKey"
+          fi
+
+          terraform validate
+
+    - task: AzureCLI@2
+      displayName: "Terraform Plan"
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        addSpnToEnvironment: true
+        scriptType: bash
+        scriptLocation: inlineScript
+        workingDirectory: "$(Build.SourcesDirectory)/envs/${{ parameters.environment }}"
+        inlineScript: |
+          export ARM_CLIENT_ID="$servicePrincipalId"
+          export ARM_TENANT_ID="$tenantId"
+          export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+          export ARM_USE_AZUREAD=true
+
+          if [ -n "$idToken" ]; then
+            export ARM_USE_OIDC=true
+            export ARM_OIDC_TOKEN="$idToken"
+          else
+            export ARM_CLIENT_SECRET="$servicePrincipalKey"
+          fi
+
+          terraform plan -out=tfplan
+
+    - ${{ if eq(parameters.terraformAction, 'Plan and Apply') }}:
+      - task: AzureCLI@2
+        displayName: "Terraform Apply"
+        inputs:
+          azureSubscription: $(azureServiceConnection)
+          addSpnToEnvironment: true
+          scriptType: bash
+          scriptLocation: inlineScript
+          workingDirectory: "$(Build.SourcesDirectory)/envs/${{ parameters.environment }}"
+          inlineScript: |
+            export ARM_CLIENT_ID="$servicePrincipalId"
+            export ARM_TENANT_ID="$tenantId"
+            export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+            export ARM_USE_AZUREAD=true
+
+            if [ -n "$idToken" ]; then
+              export ARM_USE_OIDC=true
+              export ARM_OIDC_TOKEN="$idToken"
+            else
+              export ARM_CLIENT_SECRET="$servicePrincipalKey"
+            fi
+
+            terraform apply -auto-approve tfplan
