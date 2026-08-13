@@ -4,7 +4,7 @@ pr: none
 pool:
   name: "Default"
   demands:
-    - Agent.Name -equals "vmagent-tf"
+    - Agent.Name -equals vmagent-tf
 
 parameters:
   - name: environment
