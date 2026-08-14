@@ -1,7 +1,7 @@
 # Terraform Variables for the Hub Environment
 
 # Subscription and Provider Configuration for the Hub Environment
-subscription_id = "886e97b0-f259-4c79-8ac0-984dbc60bbee"
+subscription_id = "54ff4cf6-32b8-4112-ac42-05a514813214"
 # Local variables for the Hub environment, including subscription and provider configuration, as well as environment-specific settings.
 project_name = "xencia"
 env          = "hub"
